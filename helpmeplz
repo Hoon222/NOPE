@@ -1,3 +1,24 @@
+    """Prophet으로 당일 종가 가격 예측"""
+    global predicted_close_price
+    #60분 간격으로 AI 예측
+    df = pyupbit.get_ohlcv(ticker, interval="minute30")
+    df = df.reset_index()
+    df['ds'] = df['index']
+    df['y'] = df['close']
+    data = df[['ds','y']]
+    model = Prophet()
+    model.fit(data)
+    future = model.make_future_dataframe(periods=24, freq='H')
+    forecast = model.predict(future)
+    closeDf = forecast[forecast['ds'] == forecast.iloc[-1]['ds'].replace(hour=9)]
+    if len(closeDf) == 0:
+        closeDf = forecast[forecast['ds'] == data.iloc[-1]['ds'].replace(hour=9)]
+    closeValue = closeDf['yhat'].values[0]
+    predicted_close_price = closeValue
+predict_price("KRW-XRP")
+/* 위에  df = pyupbit.get_ohlcv(ticker, interval="minute60") > minute30으로 변경 하면 colab로 봤을때 
+예측 종가는 1460대가 나오는데 현재 가격이 1485임에도 불구하고 , 무지성으로 매수를 합니다 .. 살려주세ㅐ요 */
+
 while True:
     try:
         now = datetime.datetime.now()
