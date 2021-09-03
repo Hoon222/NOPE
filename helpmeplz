@@ -1,7 +1,63 @@
+import time
+import pyupbit
+import datetime
+import schedule
+import requests
+
+from fbprophet import Prophet
+
+access = "W1GrhxCCTYfLblVTNcXWzZKEpKh8XB8LOfYt6xsy "
+secret = "f9L0nYI73rlUtwrS6hbzVc00BCHx1TaA7CtG9l0g"
+myToken = "xoxb-2436109877958-2440029299653-qzAva93TBSLMAmNtBB4zYn1l"
+
+def post_message(token, channel, text):
+    """슬랙 메시지 전송"""
+    response = requests.post("https://slack.com/api/chat.postMessage",
+        headers={"Authorization": "Bearer "+token},
+        data={"channel": channel,"text": text}
+    )
+
+
+
+def get_target_price(ticker, k):
+    """변동성 돌파 전략으로 매수 목표가 조회""" # 5일동안 가격 조회
+    df = pyupbit.get_ohlcv(ticker, interval="day", count=5)
+    target_price = df.iloc[0]['close'] + (df.iloc[0]['high'] - df.iloc[0]['low']) * k
+    return target_price
+
+def get_start_time(ticker):
+    """시작 시간 조회"""
+    df = pyupbit.get_ohlcv(ticker, interval="day", count=1)
+    start_time = df.index[0]
+    return start_time
+
+def get_ma50(ticker):
+    """50일 이동 평균선 조회"""
+    df = pyupbit.get_ohlcv(ticker, interval="day", count=50)
+    ma50 = df['close'].rolling(50).mean().iloc[-1]
+    return ma50 
+
+def get_balance(ticker):
+    """잔고 조회"""
+    balances = upbit.get_balances()
+    for b in balances:
+        if b['currency'] == ticker:
+            if b['balance'] is not None:
+                return float(b['balance'])
+            else:
+                return 0
+    return 0
+
+def get_current_price(ticker):
+    """현재가 조회"""
+    return pyupbit.get_orderbook(tickers=ticker)[0]["orderbook_units"][0]["ask_price"]
+
+predicted_close_price = 0
+def predict_price(ticker):
     """Prophet으로 당일 종가 가격 예측"""
     global predicted_close_price
     #60분 간격으로 AI 예측
-    df = pyupbit.get_ohlcv(ticker, interval="minute30")
+    df = pyupbit.get_ohlcv(ticker, interval="minute60")
     df = df.reset_index()
     df['ds'] = df['index']
     df['y'] = df['close']
@@ -16,9 +72,20 @@
     closeValue = closeDf['yhat'].values[0]
     predicted_close_price = closeValue
 predict_price("KRW-XRP")
-/* 위에  df = pyupbit.get_ohlcv(ticker, interval="minute60") > minute30으로 변경 하면 colab로 봤을때 
-예측 종가는 1460대가 나오는데 현재 가격이 1485임에도 불구하고 , 무지성으로 매수를 합니다 .. 살려주세ㅐ요 */
+schedule.every().hour.do(lambda: predict_price("KRW-XRP"))
+schedule.every().hour.do(lambda: post_message(myToken,"#hooncoin", "XRP AI value :" +str(predicted_close_price)))
 
+
+
+
+# 로그인
+upbit = pyupbit.Upbit(access, secret)
+print("autotrade start")
+post_message(myToken,"#hooncoin", "HoonAIbot Start ")
+post_message(myToken,"#hooncoin", "XRP AI value :" +str(predicted_close_price))
+
+
+# 자동매매 시작
 while True:
     try:
         now = datetime.datetime.now()
@@ -51,7 +118,7 @@ while True:
                 # 리플매도
                   sell_result = upbit.sell_market_order("KRW-XRP", xrp*0.9995)
                   post_message(myToken,"#hooncoin", "XRP buy : " +str(sell_result))
-             
+                  
              #오전 8시 50분 리플 일괄매도 
             if start_time > now > end_time - datetime.timedelta(seconds=10):
                 xrp = get_balance("XRP")  
